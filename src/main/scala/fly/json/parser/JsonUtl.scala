@@ -16,8 +16,8 @@ object JsonUtl {
 
   def run(input: String): Try[ErrorStats] = {
     Try(parse(input)).flatMap { json =>
-      (json \ CID, json \ CLIENT, json \ ERROR) match {
-        case (JString(cid), JString(client), JString(error)) => Success(ErrorStats(cid, client, error))
+      (json \ CID, json \ CLIENT, json \ CURRENT, json \ ERROR) match {
+        case (JString(cid), JString(client), JString(current), JString(error)) => Success(ErrorStats(cid, client, current, error))
         case _ => Failure(new Exception(s"can't parse ${compact(render(json))}"))
       }
     }

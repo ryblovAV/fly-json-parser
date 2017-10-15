@@ -1,66 +1,83 @@
 package fly.json.parser
 
-import java.io.{File, FileInputStream}
+import java.io.{File, FileInputStream, PrintWriter}
 
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
 import org.apache.commons.compress.compressors.gzip.GzipCompressorInputStream
 
+import scala.collection.GenSeq
 import scala.io.Source
-import scala.util.Try
+import scala.util.{Failure, Success, Try}
 
-case class Result(cntErr: Int, cntSuccess: Int, errMsgs: List[String]) {
-  def incErr(msg: String): Result = copy(cntErr = cntErr + 1, errMsgs = msg :: errMsgs)
-  def incOk: Result = copy(cntSuccess = cntSuccess + 1)
+case class ErrorStats(cid: String, client: String, current: String, error: String) {
+  def isMedia: Boolean = error.contains("Media")
 }
-
-object Result {
-  def empty = Result(0, 0, List.empty[String])
-}
-
-case class ErrorStats(cid: String, client: String, error: String)
 
 object ErrorStats {
   val CID = "CID"
   val CLIENT = "Client"
+  val CURRENT = "Current"
   val ERROR = "error"
 }
 
 object MainApp {
 
-  val sourceFolder = "/Users/user/projects/fly-json/data"
-
-  private def processFolder(path: String): Unit = {
+  private def processFolder(path: String): GenSeq[String] = {
     val d = new File(path)
     if (d.exists && d.isDirectory) {
       d.listFiles
         .filter(f => f.isFile && f.getName.endsWith(".tar.gz"))
         .par
-        .foreach(f => println(s"${f.getName}: ${processArchive(f)}"))
+        .flatMap(processArchive)
+    } else {
+      Nil
     }
   }
 
-  private def processArchive(file: File): Option[Result] = {
+  private def decodeFileName(fileName: String): Try[String] = {
+    Try(fileName.split('/').last.split('-')).flatMap {
+      case Array(_, year, month, day, hour, minutes, _*) => Success(s"$day.$month.$year $hour:$minutes:$day")
+      case _ => Failure(new Exception(s"cant't extract date from file name: $fileName"))
+    }
+  }
+
+  private def processArchive(file: File): List[String] = {
     val optIn = Option(new TarArchiveInputStream(new GzipCompressorInputStream(new FileInputStream(file))))
     try {
-      optIn.map(in =>
+      optIn.toList.flatMap(in =>
         Iterator.continually(in.getNextTarEntry)
           .takeWhile(_ != null)
           .filter(entry => !entry.isDirectory && entry.getName.endsWith(".json"))
-          .map(_ => readFile(in))
-          .foldLeft(Result.empty){ case (acc, r) =>
-            if (r.isFailure) acc.incErr(r.toString) else acc.incOk }
+          .flatMap(entry => readFile(in, entry.getName))
       )
     } finally {
       optIn.foreach(_.close())
     }
   }
 
-  private def readFile[T](tarEntry: TarArchiveInputStream): Try[ErrorStats] = {
-    val s = Source.fromInputStream(tarEntry).mkString
-    JsonUtl.run(s)
+  private def buildInsertSQL(err: ErrorStats, fileName: String): Option[String] = {
+    decodeFileName(fileName)
+      .map(date =>
+        s"insert into t_error values('$date','','${err.cid}','${err.client}}','${err.current}}', '${err.error}');\n"
+      ).toOption
+  }
+
+  private def readFile[T](tarEntry: TarArchiveInputStream, fileName: String): Option[String] = {
+    JsonUtl.run(Source.fromInputStream(tarEntry).mkString) match {
+      case Success(errorStats) if errorStats.isMedia => buildInsertSQL(errorStats, fileName)
+      case Failure(e) => println(e.getMessage); None
+      case _ => None
+    }
   }
 
   def main(args: Array[String]): Unit = {
-    processFolder(sourceFolder)
+    
+    if (args.isEmpty) {
+      println(s"Set path to folder !!!")
+    }
+
+    val pw = new PrintWriter(new File("error.sql"))
+    processFolder(args.head).toList.grouped(1000).map(l => l.mkString + "commit;\n").foreach(pw.write)
+    pw.close()
   }
 }
