@@ -2,26 +2,7 @@ package fly.json.parser
 
 import fly.json.parser.ErrorStats._
 
-sealed trait JsonUtl[T] {
-  def run(input: String): Either[T, ErrorStats]
-}
-
-object CirceJsonUtl extends JsonUtl[io.circe.Error] {
-
-  import io.circe.parser._
-  import io.circe.{Decoder, _}
-
-  implicit val errorDecoder: Decoder[ErrorStats] = Decoder.forProduct3(CID, CLIENT, ERROR)(ErrorStats.apply)
-
-  override def run(input: String): Either[Error, ErrorStats] = {
-    parse(input) match {
-      case Left(error) => Left(error)
-      case Right(json) => json.as[ErrorStats]
-    }
-  }
-}
-
-object Json4sUtl extends JsonUtl[Throwable] {
+object JsonUtl {
 
   import org.json4s._
   import org.json4s.jackson.Serialization

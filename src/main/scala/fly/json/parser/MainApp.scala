@@ -45,7 +45,7 @@ object MainApp {
         Iterator.continually(in.getNextTarEntry)
           .takeWhile(_ != null)
           .filter(entry => !entry.isDirectory && entry.getName.endsWith(".json"))
-          .map(_ => readFile(in, Json4sUtl))
+          .map(_ => readFile(in))
           .foldLeft(Result.empty){ case (acc, r) =>
             if (r.isLeft) acc.incErr(r.toString) else acc.incOk }
       )
@@ -54,9 +54,9 @@ object MainApp {
     }
   }
 
-  private def readFile[T](tarEntry: TarArchiveInputStream, jsonUtl: JsonUtl[T]): Either[T, ErrorStats] = {
+  private def readFile[T](tarEntry: TarArchiveInputStream): Either[Throwable, ErrorStats] = {
     val s = Source.fromInputStream(tarEntry).mkString
-    jsonUtl.run(s)
+    JsonUtl.run(s)
   }
 
   def main(args: Array[String]): Unit = {
