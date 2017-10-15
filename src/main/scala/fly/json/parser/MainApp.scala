@@ -5,7 +5,7 @@ import java.io.{File, FileInputStream, PrintWriter}
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
 import org.apache.commons.compress.compressors.gzip.GzipCompressorInputStream
 
-import scala.collection.GenSeq
+import scala.collection.parallel.mutable.ParArray
 import scala.io.Source
 import scala.util.{Failure, Success, Try}
 
@@ -22,7 +22,7 @@ object ErrorStats {
 
 object MainApp {
 
-  private def processFolder(path: String): GenSeq[String] = {
+  private def processFolder(path: String): ParArray[String] = {
     val d = new File(path)
     if (d.exists && d.isDirectory) {
       d.listFiles
@@ -30,7 +30,7 @@ object MainApp {
         .par
         .flatMap(processArchive)
     } else {
-      Nil
+      ParArray.empty[String]
     }
   }
 
