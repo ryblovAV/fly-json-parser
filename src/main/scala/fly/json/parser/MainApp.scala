@@ -6,6 +6,7 @@ import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
 import org.apache.commons.compress.compressors.gzip.GzipCompressorInputStream
 
 import scala.io.Source
+import scala.util.Try
 
 case class Result(cntErr: Int, cntSuccess: Int, errMsgs: List[String]) {
   def incErr(msg: String): Result = copy(cntErr = cntErr + 1, errMsgs = msg :: errMsgs)
@@ -47,14 +48,14 @@ object MainApp {
           .filter(entry => !entry.isDirectory && entry.getName.endsWith(".json"))
           .map(_ => readFile(in))
           .foldLeft(Result.empty){ case (acc, r) =>
-            if (r.isLeft) acc.incErr(r.toString) else acc.incOk }
+            if (r.isFailure) acc.incErr(r.toString) else acc.incOk }
       )
     } finally {
       optIn.foreach(_.close())
     }
   }
 
-  private def readFile[T](tarEntry: TarArchiveInputStream): Either[Throwable, ErrorStats] = {
+  private def readFile[T](tarEntry: TarArchiveInputStream): Try[ErrorStats] = {
     val s = Source.fromInputStream(tarEntry).mkString
     JsonUtl.run(s)
   }
