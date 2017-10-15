@@ -8,8 +8,8 @@ import org.apache.commons.compress.compressors.gzip.GzipCompressorInputStream
 import scala.io.Source
 
 case class Result(cntErr: Int, cntSuccess: Int, errMsgs: List[String]) {
-  def incErr(msg: String) = Result(cntErr + 1, cntSuccess, msg :: errMsgs)
-  def incOk = Result(cntErr, cntSuccess + 1, errMsgs)
+  def incErr(msg: String): Result = copy(cntErr = cntErr + 1, errMsgs = msg :: errMsgs)
+  def incOk: Result = copy(cntSuccess = cntSuccess + 1)
 }
 
 object Result {
