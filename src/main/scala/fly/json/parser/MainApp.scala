@@ -63,7 +63,7 @@ object MainApp {
   }
 
   private def readFile[T](tarEntry: TarArchiveInputStream, fileName: String): Option[String] = {
-    JsonUtl.run(Source.fromInputStream(tarEntry).mkString) match {
+    JsonUtl.run(Source.fromInputStream(tarEntry, "UTF-8").mkString) match {
       case Success(errorStats) if errorStats.isMedia => buildInsertSQL(errorStats, fileName)
       case Failure(e) => println(e.getMessage); None
       case _ => None
