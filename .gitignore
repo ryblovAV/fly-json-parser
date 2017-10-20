@@ -1,0 +1,6 @@
+*.gz
+*.jar
+*.class
+target
+
+/error.sql
