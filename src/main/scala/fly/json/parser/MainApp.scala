@@ -70,14 +70,30 @@ object MainApp {
     }
   }
 
+  private def runWithMeasure[T](f: => T): (T, Long) = {
+    val start = System.nanoTime()
+    val result = f
+    val end = System.nanoTime()
+    result -> (end - start) / 1000000
+  }
+
   def main(args: Array[String]): Unit = {
-    
+
     if (args.isEmpty) {
       println(s"Set path to folder !!!")
     }
 
-    val pw = new PrintWriter(new File("error.sql"))
-    processFolder(args.head).toList.grouped(1000).map(l => l.mkString + "commit;\n").foreach(pw.write)
-    pw.close()
+    val path = args.head
+
+    val (_, time) = runWithMeasure(
+      {
+        val pw = new PrintWriter(new File("error.sql"))
+        processFolder(path).toList.grouped(1000).map(l => l.mkString + "commit;\n").foreach(pw.write)
+        pw.close()
+      }
+    )
+
+    println(s"-------------------------------")
+    println(s"Elapsed time: $time ms")
   }
 }
