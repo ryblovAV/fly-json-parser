@@ -2,6 +2,7 @@ package fly.json.parser
 
 import java.io.{File, FileInputStream, PrintWriter}
 
+import fly.json.parser.JsonUtl.JsonParser
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
 import org.apache.commons.compress.compressors.gzip.GzipCompressorInputStream
 
@@ -22,13 +23,13 @@ object ErrorStats {
 
 object MainApp {
 
-  private def processFolder(path: String): ParArray[String] = {
+  private def processFolder(path: String, parseJSON: String => Try[ErrorStats]): ParArray[String] = {
     val d = new File(path)
     if (d.exists && d.isDirectory) {
       d.listFiles
         .filter(f => f.isFile && f.getName.endsWith(".tar.gz"))
         .par
-        .flatMap(processArchive)
+        .flatMap(processArchive(_, parseJSON))
     } else {
       ParArray.empty[String]
     }
@@ -41,14 +42,14 @@ object MainApp {
     }
   }
 
-  private def processArchive(file: File): List[String] = {
+  private def processArchive(file: File, parseJSON: String => Try[ErrorStats]): List[String] = {
     val optIn = Option(new TarArchiveInputStream(new GzipCompressorInputStream(new FileInputStream(file))))
     try {
       optIn.toList.flatMap(in =>
         Iterator.continually(in.getNextTarEntry)
           .takeWhile(_ != null)
           .filter(entry => !entry.isDirectory && entry.getName.endsWith(".json"))
-          .flatMap(entry => readFile(in, entry.getName))
+          .flatMap(entry => readFile(in, entry.getName, parseJSON))
       )
     } finally {
       optIn.foreach(_.close())
@@ -62,8 +63,8 @@ object MainApp {
       ).toOption
   }
 
-  private def readFile[T](tarEntry: TarArchiveInputStream, fileName: String): Option[String] = {
-    JsonUtl.run(Source.fromInputStream(tarEntry, "UTF-8").mkString) match {
+  private def readFile[T](tarEntry: TarArchiveInputStream, fileName: String, parseJSON: String => Try[ErrorStats]): Option[String] = {
+    parseJSON(Source.fromInputStream(tarEntry, "UTF-8").mkString) match {
       case Success(errorStats) if errorStats.isMedia => buildInsertSQL(errorStats, fileName)
       case Failure(e) => println(e.getMessage); None
       case _ => None
@@ -77,18 +78,27 @@ object MainApp {
     result -> (end - start) / 1000000
   }
 
+  private def getJsonParser(name: String): JsonParser = {
+    name match {
+      case "json4s" => Json4sUtl.run
+      case "circe" => CirceJsonUtl.run
+      case _ => throw new Exception(s"Unknown Json parser name: $name")
+    }
+  }
+
   def main(args: Array[String]): Unit = {
 
     if (args.isEmpty) {
       println(s"Set path to folder !!!")
     }
-
     val path = args.head
+
+    val jsonParser = if (args.length > 1) getJsonParser(args(1)) else Json4sUtl.run _
 
     val (_, time) = runWithMeasure(
       {
         val pw = new PrintWriter(new File("error.sql"))
-        processFolder(path).toList.grouped(1000).map(l => l.mkString + "commit;\n").foreach(pw.write)
+        processFolder(path, jsonParser).toList.grouped(1000).map(l => l.mkString + "commit;\n").foreach(pw.write)
         pw.close()
       }
     )
